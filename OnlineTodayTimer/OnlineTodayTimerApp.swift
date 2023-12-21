@@ -43,11 +43,18 @@ struct OnlineTodayTimerApp: App {
         formatter.unitsStyle = .abbreviated
         return formatter
     }()
+    
+    let dateFormatter: DateFormatter = {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .none
+        dateFormatter.timeStyle = .short
+        return dateFormatter
+    }()
 
     var body: some Scene {
         MenuBarExtra {
             Button(action: {}, label: {
-                Text("Button")
+                Text("Start from \(dateFormatter.string(from: store.startDate))")
             })
         } label: {
             Text("\(formatter.string(from: store.endDate.timeIntervalSince(store.startDate)) ?? "0:0")")
