@@ -11,7 +11,11 @@ class ThirdTimerStore: ObservableObject {
     let lastTimeKey = "lastTime"
     let totalTimeKey = "totalTime"
     
-    @Published var startDate = Date()
+    @Published var startDate = Date() {
+        didSet {
+            UserDefaults.standard.setValue(startDate.timeIntervalSince1970, forKey: lastTimeKey)
+        }
+    }
     
     @Published var endDate = Date()
     
@@ -28,12 +32,15 @@ class ThirdTimerStore: ObservableObject {
         startDate = Date(timeIntervalSince1970: TimeInterval(lastTime))
         if !Calendar.current.isDateInToday(startDate) {
             startDate = Date()
-            UserDefaults.standard.setValue(startDate.timeIntervalSince1970, forKey: lastTimeKey)
         }
         totalTime = UserDefaults.standard.string(forKey: totalTimeKey) ?? ""
         
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { [weak self] _ in
-            self?.endDate = Date()
+            let now = Date()
+            if let endDate = self?.endDate, !Calendar.current.isDateInToday(endDate) {
+                self?.startDate = now
+            }
+            self?.endDate = now
         })
     }
     deinit {
@@ -59,21 +66,33 @@ struct OnlineTodayTimerApp: App {
         return dateFormatter
     }()
     
-    var displayTime: String {
-        var time = store.endDate.timeIntervalSince(store.startDate)
+    var totalTime: TimeInterval {
         let totalTime = store.totalTime.split(separator: ":")
         if totalTime.count == 2,
             let hours = Double(totalTime[0]),
             let minutes = Double(totalTime[1]) {
-            time = hours * 3600 + minutes * 60 - time
+            return hours * 3600 + minutes * 60
         }
-        return formatter.string(from: time) ?? "0h 0m"
+        return 0
+    }
+    
+    var displayTime: String {
+        var time = store.endDate.timeIntervalSince(store.startDate)
+        return formatter.string(from: totalTime - time) ?? "0h 0m"
+    }
+    
+    var startFrom: String {
+        dateFormatter.string(from: store.startDate)
+    }
+    
+    var endAt: String {
+        dateFormatter.string(from: store.startDate.addingTimeInterval(totalTime))
     }
 
     var body: some Scene {
         MenuBarExtra {
             VStack(alignment: .leading) {
-                Text("Start from \(dateFormatter.string(from: store.startDate))")
+                Text("Start from \(startFrom) | End at \(endAt)")
                 HStack {
                     Text("Total duration").layoutPriority(1)
                     TextField("hh:mm", text: $store.totalTime)
