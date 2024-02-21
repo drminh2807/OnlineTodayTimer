@@ -6,10 +6,15 @@
 //
 
 import SwiftUI
+import Combine
 
 class ThirdTimerStore: ObservableObject {
     let lastTimeKey = "lastTime"
     let totalTimeKey = "totalTime"
+    
+    var bag = Set<AnyCancellable>()
+
+    let dnc = DistributedNotificationCenter.default()
     
     @Published var startDate = Date() {
         didSet {
@@ -25,6 +30,8 @@ class ThirdTimerStore: ObservableObject {
         }
     }
     
+    @Published var lockedDate: Date?
+    
     var timer: Timer?
     
     init() {
@@ -36,12 +43,23 @@ class ThirdTimerStore: ObservableObject {
         totalTime = UserDefaults.standard.string(forKey: totalTimeKey) ?? ""
         
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true, block: { [weak self] _ in
-            let now = Date()
-            if let endDate = self?.endDate, !Calendar.current.isDateInToday(endDate) {
-                self?.startDate = now
-            }
-            self?.endDate = now
+            self?.endDate = Date()
         })
+        
+        dnc.publisher(for: Notification.Name(rawValue: "com.apple.screenIsLocked"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.lockedDate = Date()
+                print("Locked")
+            }.store(in: &bag)
+
+        dnc.publisher(for: Notification.Name(rawValue: "com.apple.screenIsUnlocked"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                if let lockedDate = self?.lockedDate, !Calendar.current.isDateInToday(lockedDate) {
+                    self?.startDate = Date()
+                }
+            }.store(in: &bag)
     }
     deinit {
         timer?.invalidate()
@@ -77,8 +95,8 @@ struct OnlineTodayTimerApp: App {
     }
     
     var displayTime: String {
-        var time = store.endDate.timeIntervalSince(store.startDate)
-        return formatter.string(from: totalTime - time) ?? "0h 0m"
+        let time = store.endDate.timeIntervalSince(store.startDate)
+        return (formatter.string(from: totalTime - time) ?? "0h 0m")
     }
     
     var startFrom: String {
@@ -88,23 +106,32 @@ struct OnlineTodayTimerApp: App {
     var endAt: String {
         dateFormatter.string(from: store.startDate.addingTimeInterval(totalTime))
     }
+    
+    var lockedDate: String {
+        guard let lockedDate = store.lockedDate else { return "--" }
+        return dateFormatter.string(from: lockedDate)
+    }
+    
+    func openApp() {
+        // TODO: alksjdlkas
+    }
+
 
     var body: some Scene {
-        MenuBarExtra {
+        WindowGroup {
             VStack(alignment: .leading) {
-                Text("Start from \(startFrom) | End at \(endAt)")
+                Text("Start from \(startFrom) | End at \(endAt) | Last locked at \(lockedDate)")
                 HStack {
-                    Text("Total duration").layoutPriority(1)
+                    Text("Total duration \(store.totalTime)").layoutPriority(1)
                     TextField("hh:mm", text: $store.totalTime)
                         .multilineTextAlignment(.trailing)
                 }
             }.padding(.all, 16)
+        }.windowResizability(.contentMinSize)
+        MenuBarExtra {
+            Button(action: openApp, label: { Text("Happy coding!") })
         } label: {
             Text(displayTime)
-        }.menuBarExtraStyle(.window)
-
-        WindowGroup {
-            ContentView()
         }
     }
 }
