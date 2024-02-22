@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import ServiceManagement
 
 class ThirdTimerStore: ObservableObject {
     let lastTimeKey = "lastTime"
@@ -24,13 +25,21 @@ class ThirdTimerStore: ObservableObject {
     
     @Published var endDate = Date()
     
-    @Published var totalTime = "" {
+    @Published var totalTime = "9:30" {
         didSet {
             UserDefaults.standard.setValue(totalTime, forKey: totalTimeKey)
         }
     }
     
     @Published var lockedDate: Date?
+    
+    @Published var isEditingStartDate = false
+    
+    @Published var editingStartTime = ""
+    
+    @Published var isEditingTotalDuration = false
+    
+    @Published var editingTotalDuration = ""
     
     var timer: Timer?
     
@@ -69,7 +78,7 @@ class ThirdTimerStore: ObservableObject {
 @main
 struct OnlineTodayTimerApp: App {
     @StateObject var store = ThirdTimerStore()
-    
+
     let formatter: DateComponentsFormatter = {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute]
@@ -113,21 +122,74 @@ struct OnlineTodayTimerApp: App {
     }
     
     func openApp() {
-        // TODO: alksjdlkas
+        NSApp.setActivationPolicy(.regular)
     }
-
+    
+    func onEditStart() {
+        store.isEditingStartDate = true
+    }
+    
+    func onEditTotalDuration() {
+        store.isEditingTotalDuration = true
+    }
+    
+    func onUpdateStart() {
+        let components = store.editingStartTime.split(separator: ":")
+        guard components.count == 2,
+              let hours = Int(components[0]),
+              let minutes = Int(components[1]) else {
+            store.isEditingStartDate = false
+            return
+        }
+        let date = Calendar.current.date(bySettingHour: hours, minute: minutes, second: 0, of: Date())!
+        store.startDate = date
+        store.isEditingStartDate = false
+    }
+    
+    func onUpdateTotalDuration() {
+        store.isEditingTotalDuration = false
+        let components = store.editingTotalDuration.split(separator: ":")
+        guard components.count == 2 else { return }
+        store.totalTime = store.editingTotalDuration
+    }
 
     var body: some Scene {
         WindowGroup {
             VStack(alignment: .leading) {
-                Text("Start from \(startFrom) | End at \(endAt) | Last locked at \(lockedDate)")
-                HStack {
-                    Text("Total duration \(store.totalTime)").layoutPriority(1)
-                    TextField("hh:mm", text: $store.totalTime)
-                        .multilineTextAlignment(.trailing)
+                if store.isEditingStartDate {
+                    HStack {
+                        Text("Start at")
+                        TextField("hh:mm", text: $store.editingStartTime)
+                            .multilineTextAlignment(.trailing)
+                        Button(action: onUpdateStart) { Text("Update") }
+                    }
+                } else {
+                    HStack {
+                        Text("Start at \(startFrom)")
+                        Button(action: onEditStart) { Text("Edit") }
+                    }
                 }
-            }.padding(.all, 16)
-        }.windowResizability(.contentMinSize)
+                if store.isEditingTotalDuration {
+                    HStack {
+                        Text("Total duration")
+                        TextField("hh:mm", text: $store.editingTotalDuration)
+                            .multilineTextAlignment(.trailing)
+                        Button(action: onUpdateTotalDuration) { Text("Update") }
+                    }
+                } else {
+                    HStack {
+                        Text("Total duration \(store.totalTime)")
+                        Button(action: onEditTotalDuration) { Text("Edit") }
+                    }
+                }
+                Text("End at \(endAt)")
+            }
+            .padding(.all, 16)
+            .frame(width: 300, height: 110, alignment: .leading)
+            .onAppear {
+                try? SMAppService.mainApp.register()
+            }
+        }.windowResizability(.contentSize)
         MenuBarExtra {
             Button(action: openApp, label: { Text("Happy coding!") })
         } label: {
